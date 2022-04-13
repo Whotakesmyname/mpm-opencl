@@ -3,4 +3,4 @@
 This project implements an MPM solver with OpenCL. It is still under development.
 
 ## License and Copyright
-Licensed under MIT License. This project uses OpenCL-SDK as a codebase.
+Licensed under MIT License. This project uses OpenCL-SDK as a codebase, especially the OpenGL & OpenCL interoperation feature demonstrated in N-Body sample.
