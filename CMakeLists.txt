@@ -16,16 +16,11 @@ cmake_minimum_required(VERSION 3.0)
 
 set(CMAKE_CXX_STANDARD 14)
 
-project(OpenCL-SDK
-  VERSION 2022.04.01
+project(MPM-OpenCL
+  VERSION 0.0.1
   LANGUAGES
     C CXX
 )
-
-include(CMakeDependentOption)
-option(OPENCL_SDK_BUILD_SAMPLES "Build sample code" ON)
-cmake_dependent_option(OPENCL_SDK_BUILD_OPENGL_SAMPLES "Build OpenCL-OpenGL interop sample code" ON OPENCL_SDK_BUILD_SAMPLES OFF)
-cmake_dependent_option(OPENCL_SDK_TEST_SAMPLES "Add CTest to samples (where applicable)" ON OPENCL_SDK_BUILD_SAMPLES OFF)
 
 include(CTest)
 
@@ -49,9 +44,6 @@ list(APPEND CMAKE_MODULE_PATH
 include(Dependencies)
 
 add_subdirectory(lib)
-if(OPENCL_SDK_BUILD_SAMPLES)
-  add_subdirectory(samples)
-endif()
 
 include(GNUInstallDirs)
 file(
@@ -84,3 +76,5 @@ install(
 )
 
 include(CPack)
+
+add_subdirectory(src)

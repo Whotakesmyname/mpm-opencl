@@ -215,8 +215,8 @@ void NBody::initializeGL()
         return program;
     };
 
-    vertex_shader = create_shader("./nbody.vert.glsl", GL_VERTEX_SHADER);
-    fragment_shader = create_shader("./nbody.frag.glsl", GL_FRAGMENT_SHADER);
+    vertex_shader = create_shader("./shader.vert", GL_VERTEX_SHADER);
+    fragment_shader = create_shader("./shader.frag", GL_FRAGMENT_SHADER);
     gl_program = create_program({ vertex_shader, fragment_shader });
 
     using uni = std::uniform_real_distribution<float>;
@@ -287,7 +287,7 @@ void NBody::initializeCL()
     queue = cl::CommandQueue{ opencl_context, device };
 
     // Compile kernel
-    const char* kernel_location = "./nbody.cl";
+    const char* kernel_location = "./kernel.cl";
     std::ifstream kernel_stream{ kernel_location };
     if (!kernel_stream.is_open())
         throw std::runtime_error{ std::string{ "Cannot open kernel source: " }
