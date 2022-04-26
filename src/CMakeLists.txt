@@ -2,10 +2,6 @@ set(MPM_TARGET "mpm-opencl")
 
 add_executable(${MPM_TARGET} main.cpp)
 
-target_include_directories(${MPM_TARGET}
-    PRIVATE
-        ${OPENCL_SDK_INCLUDE_DIRS}
-)
 target_link_libraries(${MPM_TARGET}
     PRIVATE
         OpenCL::Headers
