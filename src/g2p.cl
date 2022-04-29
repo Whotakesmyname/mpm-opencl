@@ -20,14 +20,15 @@ int coord2index(int2 coord) {
 
 
 kernel void grid2particle(
-    global float2 *position, // particle property
+    global const float2 *position, // particle property
+    global float2 *next_position,
     global float2 *velocity, // particle property
     global float4 *Cmat, // particle property; 2x2 mat in row major
     global float *J, // particle property
     global float2 *grid_v, // grid velocity
     global float *grid_m // grid mass
 ) {
-    size_t pid = get_linear_global_id();
+    size_t pid = get_global_linear_id();
     float2 fx, bx;
     fx = fract(position[pid], &bx);
     int2 coord = convert_int2(bx);
@@ -47,7 +48,7 @@ kernel void grid2particle(
         }
     }
     velocity[pid] = next_v;
-    position[pid] += next_v * TIME_DELTA;
+    next_position[pid] = position[pid] + next_v * TIME_DELTA;
     J[pid] *= 1.f + TIME_DELTA * (next_C.x + next_C.w);
     Cmat[pid] = next_C;
 }

@@ -27,8 +27,8 @@ set_target_properties(${MPM_TARGET}
 )
 
 # Copy dependent glsl and cl source code to bin
-set(OPENCL_KERNELS kernel.cl)
-set(OPENCL_SHADERS shader.vert shader.frag)
+set(OPENCL_KERNELS p2g.cl grid.cl g2p.cl)
+set(OPENCL_SHADERS mpm2d.vert mpm2d.frag)
 if (NOT TARGET ${MPM_TARGET}-device-code)
     set(DEVICE_CODE_OUTPUTS)
     foreach(DEVICE_CODE_SOURCE IN LISTS OPENCL_KERNELS OPENCL_SHADERS)

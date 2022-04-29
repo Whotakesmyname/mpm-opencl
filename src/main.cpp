@@ -45,11 +45,12 @@ class MPM : public cl::sdk::InteropWindow {
                       device_id,
                       device_type},
         particle_count(8192),
-        x_abs_range(192.f),
-        y_abs_range(128.f),
-        z_abs_range(32.f),
-        mass_min(100.f),
-        mass_max(500.f),
+        // x_abs_range(192.f),
+        // y_abs_range(128.f),
+        // z_abs_range(32.f),
+        x_abs_range(1.f),
+        y_abs_range(1.f),
+        z_abs_range(1.f),
         RMB_pressed(false),
         dist(std::max({x_abs_range, y_abs_range, z_abs_range}) * 3),
         phi(0),
@@ -74,29 +75,39 @@ class MPM : public cl::sdk::InteropWindow {
   float x_abs_range, y_abs_range, z_abs_range, mass_min, mass_max;
 
   // Host-side containers
-  std::vector<cl_float4> pos_mass;
-  std::vector<cl_float3> velocity;
-  std::vector<cl_float3> forces;
+  std::vector<cl_float2> pos_host_buffer;
+  // std::vector<cl_float4> pos_mass;
+  // std::vector<cl_float3> velocity;
+  // std::vector<cl_float3> forces;
 
   // OpenCL objects
   cl::Device device;
   cl::CommandQueue queue;
-  cl::Program cl_program;
-  cl::Kernel kernel;
+  // cl::Program cl_program;
+  // cl::Kernel kernel;
   cl::Sampler sampler;
 
-  cl::Buffer velocity_buffer;
-  DoubleBuffer<cl::BufferGL> cl_pos_mass;
+  // cl::Buffer velocity_buffer;
+  cl::Buffer particle_v;
+  cl::Buffer Cmat; // APIC matrix
+  cl::Buffer J;
+  cl::Buffer grid_v;
+  cl::Buffer grid_m;
+  DoubleBuffer<cl::BufferGL> cl_pos;
+  // DoubleBuffer<cl::BufferGL> cl_pos_mass;
 
   cl::vector<cl::Memory> interop_resources;
   cl::vector<cl::Event> acquire_wait_list, release_wait_list;
-  cl::NDRange gws, lws;    // Global/local work-sizes
-  cl::Kernel step_kernel;  // Kernel
+  // cl::NDRange gws, lws;    // Global/local work-sizes
+  cl::NDRange particle_ws, grid_ws, lws;
+  // cl::Kernel step_kernel;  // Kernel
+  cl::Kernel p2g_kernel, grid_kernel, g2p_kernel;
 
   // OpenGL objects
   cl_GLuint vertex_shader, fragment_shader, gl_program;
   DoubleBuffer<cl_GLuint> vertex_array;
-  DoubleBuffer<cl_GLuint> gl_pos_mass;
+  // DoubleBuffer<cl_GLuint> gl_pos_mass;
+  DoubleBuffer<cl_GLuint> gl_pos;
 
   bool RMB_pressed;           // Variables to enable dragging
   sf::Vector2<int> mousePos;  // Variables to enable dragging
@@ -202,31 +213,38 @@ void MPM::initializeGL() {
     return program;
   };
 
-  vertex_shader = create_shader("./shader.vert", GL_VERTEX_SHADER);
-  fragment_shader = create_shader("./shader.frag", GL_FRAGMENT_SHADER);
+  // vertex_shader = create_shader("./shader.vert", GL_VERTEX_SHADER);
+  vertex_shader = create_shader("./mpm2d.vert", GL_VERTEX_SHADER);
+  fragment_shader = create_shader("./mpm2d.frag", GL_FRAGMENT_SHADER);
   gl_program = create_program({vertex_shader, fragment_shader});
 
   using uni = std::uniform_real_distribution<float>;
-  std::generate_n(std::back_inserter(pos_mass), particle_count,
-                  [prng = std::default_random_engine(),
-                   x_dist = uni(-x_abs_range, x_abs_range),
-                   y_dist = uni(-y_abs_range, y_abs_range),
-                   z_dist = uni(-z_abs_range, z_abs_range),
-                   m_dist = uni(mass_min, mass_max)]() mutable {
-                    return cl_float4{x_dist(prng), y_dist(prng), z_dist(prng),
-                                     m_dist(prng)};
-                  });
+  // fill position buffer with initial values
+  std::generate_n(std::back_inserter(pos_host_buffer), particle_count,
+  [prng = std::default_random_engine(), x_dist = uni(0.f, x_abs_range),
+  y_dist = uni(0.f, y_abs_range)]() mutable {
+    return cl_float2{x_dist(prng) * 0.4f + 0.2f, y_dist(prng) * 0.4f + 0.2f};
+  });
+  // std::generate_n(std::back_inserter(pos_mass), particle_count,
+  //                 [prng = std::default_random_engine(),
+  //                  x_dist = uni(-x_abs_range, x_abs_range),
+  //                  y_dist = uni(-y_abs_range, y_abs_range),
+  //                  z_dist = uni(-z_abs_range, z_abs_range),
+  //                  m_dist = uni(mass_min, mass_max)]() mutable {
+  //                   return cl_float4{x_dist(prng), y_dist(prng), z_dist(prng),
+  //                                    m_dist(prng)};
+  //                 });
 
   glUseProgram(gl_program);
   checkError("glUseProgram(gl_program)");
-  for (auto vbo_vao : {std::make_pair(&gl_pos_mass.front, &vertex_array.front),
-                       std::make_pair(&gl_pos_mass.back, &vertex_array.back)}) {
+  for (auto vbo_vao : {std::make_pair(&gl_pos.front, &vertex_array.front),
+                       std::make_pair(&gl_pos.back, &vertex_array.back)}) {
     glGenBuffers(1, vbo_vao.first);
     checkError("glGenBuffers(1, &vertex_buffer)");
     glBindBuffer(GL_ARRAY_BUFFER, *vbo_vao.first);
     checkError("glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer)");
-    glBufferData(GL_ARRAY_BUFFER, pos_mass.size() * sizeof(cl_float4),
-                 pos_mass.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, pos_host_buffer.size() * sizeof(cl_float2),
+                 pos_host_buffer.data(), GL_STATIC_DRAW);
     checkError(
         "glBufferData(GL_ARRAY_BUFFER, quad.size() * sizeof(float), "
         "quad.data(), GL_STATIC_DRAW)");
@@ -238,20 +256,25 @@ void MPM::initializeGL() {
     glBindVertexArray(*vbo_vao.second);
     checkError("glBindVertexArray(vertex_array)");
     glBindBuffer(GL_ARRAY_BUFFER, *vbo_vao.first);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(cl_float4),
+    // glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(cl_float4),
+    //                       (GLvoid*)(NULL));
+    // checkError(
+    //     "glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, "
+    //     "sizeof(cl_float4), (GLvoid *)(NULL))");
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(cl_float2),
                           (GLvoid*)(NULL));
     checkError(
         "glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, "
         "sizeof(cl_float4), (GLvoid *)(NULL))");
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(cl_float4),
-                          (GLvoid*)(0 + 3 * sizeof(float)));
-    checkError(
-        "glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, "
-        "sizeof(cl_float4), (GLvoid *)(0 + 3 * sizeof(float)))");
+    // glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(cl_float4),
+    //                       (GLvoid*)(0 + 3 * sizeof(float)));
+    // checkError(
+    //     "glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, "
+    //     "sizeof(cl_float4), (GLvoid *)(0 + 3 * sizeof(float)))");
     glEnableVertexAttribArray(0);
     checkError("glEnableVertexAttribArray(0)");
-    glEnableVertexAttribArray(1);
-    checkError("glEnableVertexAttribArray(1)");
+    // glEnableVertexAttribArray(1);
+    // checkError("glEnableVertexAttribArray(1)");
     glBindVertexArray(0);
     checkError("glBindVertexArray(0)");
   }
@@ -274,62 +297,113 @@ void MPM::initializeCL() {
   queue = cl::CommandQueue{opencl_context, device};
 
   // Compile kernel
-  const char* kernel_location = "./kernel.cl";
-  std::ifstream kernel_stream{kernel_location};
-  if (!kernel_stream.is_open())
-    throw std::runtime_error{std::string{"Cannot open kernel source: "} +
-                             kernel_location};
 
-  cl_program = cl::Program{
-      opencl_context, std::string{std::istreambuf_iterator<char>{kernel_stream},
-                                  std::istreambuf_iterator<char>{}}};
-  cl_program.build(device);
-  kernel = cl::Kernel{cl_program, "nbody"};
+  // const char* kernel_location = "./kernel.cl";
+  // std::ifstream kernel_stream{kernel_location};
+  // if (!kernel_stream.is_open())
+  //   throw std::runtime_error{std::string{"Cannot open kernel source: "} +
+  //                            kernel_location};
 
-  gws = cl::NDRange{particle_count};
+  // cl_program = cl::Program{
+  //     opencl_context, std::string{std::istreambuf_iterator<char>{kernel_stream},
+  //                                 std::istreambuf_iterator<char>{}}};
+  // cl_program.build(device);
+  // kernel = cl::Kernel{cl_program, "nbody"};
+
+  // compile helper
+  auto compile_kernel = [this](const char *kernel_file, const char *kernel_name) {
+    std::ifstream kernel_stream{kernel_file};
+    if (!kernel_stream.is_open()) {
+      throw std::runtime_error{std::string{"Cannot open kernel source: "} + kernel_file};
+    }
+    std::ostringstream oss;
+    oss << kernel_stream.rdbuf();
+    cl::Program program{this->opencl_context, oss.str()};
+    program.build(this->device);
+    return cl::Kernel{program, kernel_name};
+  };
+
+  p2g_kernel = compile_kernel("./p2g.cl", "particle2grid");
+  grid_kernel = compile_kernel("./grid.cl", "grid_operation");
+  g2p_kernel = compile_kernel("./g2p.cl", "grid2particle");
+
+  // gws = cl::NDRange{particle_count};
+  particle_ws = cl::NDRange{particle_count};
+  grid_ws = cl::NDRange{128, 128};
   lws = cl::NullRange;
 
-  // velocity = std::vector<cl_float4>(particle_count, cl_float4{ 0, 0, 0, 0
-  // });
-  velocity_buffer = cl::Buffer{opencl_context, CL_MEM_READ_WRITE,
-                               particle_count * sizeof(cl_float3), nullptr};
-  queue.enqueueFillBuffer(velocity_buffer, cl_float4{0, 0, 0, 0}, 0,
-                          particle_count * sizeof(cl_float4));
+  // velocity_buffer = cl::Buffer{opencl_context, CL_MEM_READ_WRITE,
+  //                              particle_count * sizeof(cl_float3), nullptr};
+  // queue.enqueueFillBuffer(velocity_buffer, cl_float4{0, 0, 0, 0}, 0,
+  //                         particle_count * sizeof(cl_float4));
+  particle_v = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float2), nullptr};
+  queue.enqueueFillBuffer(particle_v, cl_float2{0}, 0, particle_count * sizeof(cl_float2));
+  Cmat = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float4), nullptr};
+  queue.enqueueFillBuffer(Cmat, cl_float4{0}, 0, particle_count * sizeof(cl_float4));
+  J = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float), nullptr};
+  queue.enqueueFillBuffer(J, cl_float{1}, 0, particle_count * sizeof(cl_float));
+  constexpr size_t GRID_N = 128 * 128;
+  grid_v = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, GRID_N * sizeof(cl_float2), nullptr};
+  queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
+  grid_m = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, GRID_N * sizeof(cl_float), nullptr};
+  queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
   queue.finish();
 
   // Translate OpenGL object handles into OpenCL handles
-  cl_pos_mass.front =
-      cl::BufferGL{opencl_context, CL_MEM_READ_WRITE, gl_pos_mass.front};
-  cl_pos_mass.back =
-      cl::BufferGL{opencl_context, CL_MEM_READ_WRITE, gl_pos_mass.back};
+  // cl_pos_mass.front =
+  //     cl::BufferGL{opencl_context, CL_MEM_READ_WRITE, gl_pos_mass.front};
+  // cl_pos_mass.back =
+  //     cl::BufferGL{opencl_context, CL_MEM_READ_WRITE, gl_pos_mass.back};
+  cl_pos.front =
+      cl::BufferGL{opencl_context, CL_MEM_READ_WRITE, gl_pos.front};
+  cl_pos.back =
+      cl::BufferGL{opencl_context, CL_MEM_READ_WRITE, gl_pos.back};
 
   // Translate
   interop_resources =
-      cl::vector<cl::Memory>{cl_pos_mass.front, cl_pos_mass.back};
+      // cl::vector<cl::Memory>{cl_pos_mass.front, cl_pos_mass.back};
+      cl::vector<cl::Memory>{cl_pos.front, cl_pos.back};
 }
 
 void MPM::updateScene() {
-  auto nbody = cl::KernelFunctor<cl::BufferGL, cl::BufferGL, cl::Buffer,
-                                 cl_uint, cl_float>{cl_program, "nbody"};
+  // auto nbody = cl::KernelFunctor<cl::BufferGL, cl::BufferGL, cl::Buffer,
+  //                                cl_uint, cl_float>{cl_program, "nbody"};
+  auto p2g = cl::KernelFunctor<cl::BufferGL, cl::Buffer, cl::Buffer, cl::Buffer,
+                                 cl::Buffer, cl::Buffer>{p2g_kernel};
+  auto grid_op = cl::KernelFunctor<cl::Buffer, cl::Buffer>{grid_kernel};
+  auto g2p = cl::KernelFunctor<cl::BufferGL, cl::BufferGL, cl::Buffer, cl::Buffer, cl::Buffer,
+                                cl::Buffer, cl::Buffer>{g2p_kernel};
   cl::Event acquire, release;
 
   queue.enqueueAcquireGLObjects(&interop_resources, nullptr, &acquire);
 
-  nbody(cl::EnqueueArgs{queue, cl::NDRange{particle_count}}, cl_pos_mass.front,
-        cl_pos_mass.back, velocity_buffer, static_cast<cl_uint>(particle_count),
-        0.0001f);
+  // nbody(cl::EnqueueArgs{queue, cl::NDRange{particle_count}}, cl_pos_mass.front,
+  //       cl_pos_mass.back, velocity_buffer, static_cast<cl_uint>(particle_count),
+  //       0.0001f);
+
+  for (int i = 0; i < 3; ++i) {
+    constexpr size_t GRID_N = 128 * 128;
+    queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
+    queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
+    p2g(cl::EnqueueArgs{queue, particle_ws}, cl_pos.front,
+      particle_v, Cmat, J, grid_v, grid_m);
+    grid_op(cl::EnqueueArgs{queue, grid_ws}, grid_v, grid_m);
+    g2p(cl::EnqueueArgs{queue, particle_ws}, cl_pos.front, cl_pos.back, particle_v, Cmat, J, grid_v, grid_m);
+  }
 
   queue.enqueueReleaseGLObjects(&interop_resources, nullptr, &release);
 
   // Wait for all OpenCL commands to finish
   if (!cl_khr_gl_event_supported)
-    cl::finish();
+    cl::finish(); 
   else
     release.wait();
 
   // Swap front and back buffer handles
-  cl_pos_mass.swap();
-  gl_pos_mass.swap();
+  // cl_pos_mass.swap();
+  // gl_pos_mass.swap();
+  cl_pos.swap();
+  gl_pos.swap();
 }
 
 void MPM::render() {
@@ -340,7 +414,8 @@ void MPM::render() {
   checkError("glUseProgram(gl_program)");
   glBindVertexArray(vertex_array.front);
   checkError("glBindVertexArray(vertex_array)");
-  glBindBuffer(GL_ARRAY_BUFFER, gl_pos_mass.front);
+  // glBindBuffer(GL_ARRAY_BUFFER, gl_pos_mass.front);
+  glBindBuffer(GL_ARRAY_BUFFER, gl_pos.front);
   checkError("glBindBuffer(GL_ARRAY_BUFFER, gl_pos_mass.front)");
 
   if (needMatrixReset)

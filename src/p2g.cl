@@ -52,14 +52,14 @@ float2 mat2x2_mul_float2(float4 mat, float2 vec) {
 }
 
 kernel void particle2grid(
-    global float2 *position, // particle property
+    global const float2 *position, // particle property
     global float2 *velocity, // particle property
     global float4 *Cmat, // particle property; 2x2 mat in row major
     global float *J, // particle property
     global float2 *grid_v, // grid velocity
     global float *grid_m // grid mass
     ) {
-    size_t pid = get_linear_global_id();
+    size_t pid = get_global_linear_id();
     float2 fx, bx; // fraction and integer part of the position
     fx = fract(position[pid], &bx);
     int2 coord = convert_int2(bx);
