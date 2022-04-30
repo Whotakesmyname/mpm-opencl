@@ -52,7 +52,7 @@ class MPM : public cl::sdk::InteropWindow {
         y_abs_range(1.f),
         z_abs_range(1.f),
         RMB_pressed(false),
-        dist(std::max({x_abs_range, y_abs_range, z_abs_range}) * 3),
+        dist(std::max({x_abs_range, y_abs_range, z_abs_range})),
         phi(0),
         theta(0),
         needMatrixReset(true) {}
@@ -337,7 +337,7 @@ void MPM::initializeCL() {
   // queue.enqueueFillBuffer(velocity_buffer, cl_float4{0, 0, 0, 0}, 0,
   //                         particle_count * sizeof(cl_float4));
   particle_v = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float2), nullptr};
-  queue.enqueueFillBuffer(particle_v, cl_float2{0}, 0, particle_count * sizeof(cl_float2));
+  queue.enqueueFillBuffer(particle_v, cl_float2{0, -1.f}, 0, particle_count * sizeof(cl_float2));
   Cmat = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float4), nullptr};
   queue.enqueueFillBuffer(Cmat, cl_float4{0}, 0, particle_count * sizeof(cl_float4));
   J = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float), nullptr};
@@ -381,7 +381,7 @@ void MPM::updateScene() {
   //       cl_pos_mass.back, velocity_buffer, static_cast<cl_uint>(particle_count),
   //       0.0001f);
 
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 2; ++i) {
     constexpr size_t GRID_N = 128 * 128;
     queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
     queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
@@ -488,7 +488,7 @@ void MPM::setMatrices() {
 
   // Set camera to view the origo from the z-axis with up along the y-axis
   // and distance so the entire sim space is visible with given field-of-view
-  glm::vec3 vecTarget{0, 0, 0};
+  glm::vec3 vecTarget{0.5f, 0.5f, 0.5f};
   glm::vec3 vecUp{0, 1, 0};
   glm::vec3 vecEye = vecTarget + glm::vec3{0, 0, dist};
 

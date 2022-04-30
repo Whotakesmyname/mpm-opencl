@@ -5,3 +5,7 @@ install/
 *~
 .*.sw[op]
 .vscode
+
+# profiler
+/*.cltracer
+/traces/

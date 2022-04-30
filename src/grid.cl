@@ -24,11 +24,11 @@ kernel void grid_operation(
     size_t linear_index = get_global_linear_id();
     float mass = grid_m[linear_index];
     float2 velocity = grid_v[linear_index];
-    if (mass > 0.) {
+    if (mass > 0) {
         velocity /= mass;
     }
     // gravity
-    velocity.y -= TIME_DELTA * G;
+    // velocity.y -= TIME_DELTA * G;
     // boundary condition
     size_t x = get_global_id(0), y = get_global_id(1);
     if (x < BOUND && velocity.x < 0) {
