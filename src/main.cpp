@@ -381,7 +381,7 @@ void MPM::updateScene() {
   //       cl_pos_mass.back, velocity_buffer, static_cast<cl_uint>(particle_count),
   //       0.0001f);
 
-  for (int i = 0; i < 2; ++i) {
+  for (int i = 0; i < 5; ++i) {
     constexpr size_t GRID_N = 128 * 128;
     queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
     queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
@@ -488,7 +488,7 @@ void MPM::setMatrices() {
 
   // Set camera to view the origo from the z-axis with up along the y-axis
   // and distance so the entire sim space is visible with given field-of-view
-  glm::vec3 vecTarget{0.5f, 0.5f, 0.5f};
+  glm::vec3 vecTarget{0.f, 0.f, 0.f};
   glm::vec3 vecUp{0, 1, 0};
   glm::vec3 vecEye = vecTarget + glm::vec3{0, 0, dist};
 
@@ -499,6 +499,8 @@ void MPM::setMatrices() {
                   glm::vec3{1, 0, 0}),  // theta rotates around z-axis
       phi, glm::vec3{0, 0, 1}           // theta rotates around z-axis
   );
+
+  matWorld = glm::translate(matWorld, glm::vec3{-0.5f, -0.5f, -0.5f}); // translate origin to 0.5, 0.5, 0.5
 
   glm::mat4 matView = glm::lookAt(vecEye, vecTarget, vecUp);
 
