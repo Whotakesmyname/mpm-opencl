@@ -52,7 +52,7 @@ kernel void grid2particle(
         }
     }
     velocity[pid] = next_v;
-    next_position[pid] = /* clamp( */position[pid] + next_v * TIME_DELTA/* , 0.f, 1.f) */;
+    next_position[pid] = /* clamp( */position[pid] + next_v * TIME_DELTA/* , 0.1f, 0.9f) */;
     // printf("v: %v2f, p: %v2f\n", next_v, next_position[pid]);
     // position[pid] += next_v * TIME_DELTA;
     J[pid] *= 1.f + TIME_DELTA * (next_C.x + next_C.w);

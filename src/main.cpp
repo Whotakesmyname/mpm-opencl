@@ -381,7 +381,9 @@ void MPM::updateScene() {
   //       cl_pos_mass.back, velocity_buffer, static_cast<cl_uint>(particle_count),
   //       0.0001f);
 
-  for (int i = 0; i < 5; ++i) {
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  for (int i = 0; i < 50; ++i) {
     constexpr size_t GRID_N = 128 * 128;
     queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
     queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
@@ -398,6 +400,10 @@ void MPM::updateScene() {
     cl::finish(); 
   else
     release.wait();
+  
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+  // std::cout << "simulation duration: " << duration.count() << std::endl;
 
   // Swap front and back buffer handles
   // cl_pos_mass.swap();
