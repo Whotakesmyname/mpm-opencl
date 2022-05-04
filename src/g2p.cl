@@ -3,13 +3,11 @@ const int PARTICLE_N = 8192;
 const int GRID_SIZE = 128;
 const float GRID_SPAN = 1.f / GRID_SIZE;
 const float GRID_SPAN_INVSQ = GRID_SIZE * GRID_SIZE;
-const float TIME_DELTA = 2e-4f;
 
 const float P_RHO = 1;
 const float P_VOL = 0.25f * GRID_SPAN * GRID_SPAN;
 const float P_MASS = P_VOL * P_RHO;
 const float G = 9.8f;
-const float BOUND = 3;
 const float E = 400;
 
 
@@ -20,6 +18,7 @@ int coord2index(int2 coord) {
 
 
 kernel void grid2particle(
+    const float time_delta,
     global float2 *position, // particle property
     global float2 *next_position,
     global float2 *velocity, // particle property
@@ -52,9 +51,9 @@ kernel void grid2particle(
         }
     }
     velocity[pid] = next_v;
-    next_position[pid] = /* clamp( */position[pid] + next_v * TIME_DELTA/* , 0.1f, 0.9f) */;
+    next_position[pid] = /* clamp( */position[pid] + next_v * time_delta/* , 0.1f, 0.9f) */;
     // printf("v: %v2f, p: %v2f\n", next_v, next_position[pid]);
-    // position[pid] += next_v * TIME_DELTA;
-    J[pid] *= 1.f + TIME_DELTA * (next_C.x + next_C.w);
+    // position[pid] += next_v * time_delta;
+    J[pid] *= 1.f + time_delta * (next_C.x + next_C.w);
     Cmat[pid] = next_C;
 }

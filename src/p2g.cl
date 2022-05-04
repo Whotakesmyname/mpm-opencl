@@ -4,13 +4,10 @@ const int PARTICLE_N = 8192;
 const int GRID_SIZE = 128;
 const float GRID_SPAN = 1.f / GRID_SIZE;
 const float GRID_SPAN_INVSQ = GRID_SIZE * GRID_SIZE;
-const float TIME_DELTA = 2e-4f;
 
 const float P_RHO = 1;
 const float P_VOL = 0.25f * GRID_SPAN * GRID_SPAN;
 const float P_MASS = P_VOL * P_RHO;
-const float G = 9.8f;
-const float BOUND = 3;
 const float E = 400;
 
 /** Atomic float add
@@ -54,6 +51,7 @@ float2 mat2x2_mul_float2(float4 mat, float2 vec) {
 }
 
 kernel void particle2grid(
+    const float time_delta, // time step length
     global const float2 *position, // particle property
     global float2 *velocity, // particle property
     global float4 *Cmat, // particle property; 2x2 mat in row major
@@ -72,7 +70,7 @@ kernel void particle2grid(
     //     printf("wrong coord: %d, %d, from %f, %f\n", coord.x, coord.y, grid_coord.x, grid_coord.y);
     // printf("coord: %d, %d, from %f, %f\n", coord.x, coord.y, grid_coord.x, grid_coord.y);
     float2 weights[3] = {0.5f * pown(1.5f - fx, 2), 0.75f - pown(fx - 1.f, 2), 0.5f * pown(fx - 0.5f, 2)};
-    float stress = -TIME_DELTA * 4 * E * P_VOL * (J[pid] - 1.f) * GRID_SPAN_INVSQ;
+    float stress = -time_delta * 4 * E * P_VOL * (J[pid] - 1.f) * GRID_SPAN_INVSQ;
     float4 affine = (float4)(stress, 0.f, 0.f, stress) + P_MASS * Cmat[pid];
     // printf("stress: %f, affine: %v4f\n", stress, affine);
     // scatter to grid

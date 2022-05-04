@@ -51,6 +51,9 @@ class MPM : public cl::sdk::InteropWindow {
         x_abs_range(1.f),
         y_abs_range(1.f),
         z_abs_range(1.f),
+        time_delta(2e-4f),
+        last_frame(std::chrono::high_resolution_clock::now()),
+        gravity(9.8f),
         RMB_pressed(false),
         dist(std::max({x_abs_range, y_abs_range, z_abs_range})),
         phi(0),
@@ -72,7 +75,9 @@ class MPM : public cl::sdk::InteropWindow {
  private:
   // Simulation related variables
   std::size_t particle_count;
-  float x_abs_range, y_abs_range, z_abs_range, mass_min, mass_max;
+  float x_abs_range, y_abs_range, z_abs_range;
+  float time_delta, gravity;
+  std::chrono::time_point<std::chrono::steady_clock> last_frame;
 
   // Host-side containers
   std::vector<cl_float2> pos_host_buffer;
@@ -290,6 +295,8 @@ void MPM::initializeGL() {
   glDisable(GL_CULL_FACE);
   checkError("glDisable(GL_CULL_FACE)");
   glPointSize(1.5f);
+
+  setVerticalSyncEnabled(true);
 }
 
 void MPM::initializeCL() {
@@ -368,10 +375,10 @@ void MPM::initializeCL() {
 void MPM::updateScene() {
   // auto nbody = cl::KernelFunctor<cl::BufferGL, cl::BufferGL, cl::Buffer,
   //                                cl_uint, cl_float>{cl_program, "nbody"};
-  auto p2g = cl::KernelFunctor<cl::BufferGL, cl::Buffer, cl::Buffer, cl::Buffer,
+  auto p2g = cl::KernelFunctor<cl_float, cl::BufferGL, cl::Buffer, cl::Buffer, cl::Buffer,
                                  cl::Buffer, cl::Buffer>{p2g_kernel};
-  auto grid_op = cl::KernelFunctor<cl::Buffer, cl::Buffer>{grid_kernel};
-  auto g2p = cl::KernelFunctor<cl::BufferGL, cl::BufferGL, cl::Buffer, cl::Buffer, cl::Buffer,
+  auto grid_op = cl::KernelFunctor<cl_float, cl::Buffer, cl::Buffer>{grid_kernel};
+  auto g2p = cl::KernelFunctor< cl_float, cl::BufferGL, cl::BufferGL, cl::Buffer, cl::Buffer, cl::Buffer,
                                 cl::Buffer, cl::Buffer>{g2p_kernel};
   cl::Event acquire, release;
 
@@ -382,16 +389,40 @@ void MPM::updateScene() {
   //       0.0001f);
 
   auto start_time = std::chrono::high_resolution_clock::now();
+  float time_elapsed = std::chrono::duration<float>(start_time - last_frame).count();
+  time_elapsed = std::min(time_elapsed, 1.f / 60);
+  // std::cout << "time elapsed: " << time_elapsed << std::endl;
+  last_frame = start_time;
 
-  for (int i = 0; i < 50; ++i) {
+  while (time_elapsed > 0) {
     constexpr size_t GRID_N = 128 * 128;
     queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
     queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
-    p2g(cl::EnqueueArgs{queue, particle_ws}, cl_pos.front,
+    p2g(cl::EnqueueArgs{queue, particle_ws}, time_delta, cl_pos.front,
       particle_v, Cmat, J, grid_v, grid_m);
-    grid_op(cl::EnqueueArgs{queue, grid_ws}, grid_v, grid_m);
-    g2p(cl::EnqueueArgs{queue, particle_ws}, cl_pos.front, cl_pos.back, particle_v, Cmat, J, grid_v, grid_m);
+    grid_op(cl::EnqueueArgs{queue, grid_ws}, time_delta, grid_v, grid_m);
+    g2p(cl::EnqueueArgs{queue, particle_ws}, time_delta, cl_pos.front, cl_pos.back, particle_v, Cmat, J, grid_v, grid_m);
+
+    // swap buffer in each step
+    cl_pos.swap();
+    gl_pos.swap();
+
+    time_elapsed -= 2 * time_delta;
   }
+
+  // for (int i = 0; i < 2; ++i) {
+  //   constexpr size_t GRID_N = 128 * 128;
+  //   queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
+  //   queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
+  //   p2g(cl::EnqueueArgs{queue, particle_ws}, time_delta, cl_pos.front,
+  //     particle_v, Cmat, J, grid_v, grid_m);
+  //   grid_op(cl::EnqueueArgs{queue, grid_ws}, time_delta, grid_v, grid_m);
+  //   g2p(cl::EnqueueArgs{queue, particle_ws}, time_delta, cl_pos.front, cl_pos.back, particle_v, Cmat, J, grid_v, grid_m);
+
+  //   // swap buffer in each step
+  //   cl_pos.swap();
+  //   gl_pos.swap();
+  // }
 
   queue.enqueueReleaseGLObjects(&interop_resources, nullptr, &release);
 
@@ -408,8 +439,6 @@ void MPM::updateScene() {
   // Swap front and back buffer handles
   // cl_pos_mass.swap();
   // gl_pos_mass.swap();
-  cl_pos.swap();
-  gl_pos.swap();
 }
 
 void MPM::render() {
