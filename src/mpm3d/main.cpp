@@ -30,6 +30,13 @@ struct DoubleBuffer {
   void swap() { std::swap(front, back); }
 };
 
+struct Mat3 {
+  cl_float3 r1;
+  cl_float3 r2;
+  cl_float3 r3;
+};
+static_assert(sizeof(Mat3) == 3 * sizeof(cl_float3), "Unaligned Mat");
+
 class MPM : public cl::sdk::InteropWindow {
  public:
   explicit MPM(unsigned int platform_id = 0,
@@ -80,7 +87,7 @@ class MPM : public cl::sdk::InteropWindow {
   std::chrono::time_point<std::chrono::steady_clock> last_frame;
 
   // Host-side containers
-  std::vector<cl_float2> pos_host_buffer;
+  std::vector<cl_float3> pos_host_buffer;
   // std::vector<cl_float4> pos_mass;
   // std::vector<cl_float3> velocity;
   // std::vector<cl_float3> forces;
@@ -219,16 +226,16 @@ void MPM::initializeGL() {
   };
 
   // vertex_shader = create_shader("./shader.vert", GL_VERTEX_SHADER);
-  vertex_shader = create_shader("./mpm2d.vert", GL_VERTEX_SHADER);
-  fragment_shader = create_shader("./mpm2d.frag", GL_FRAGMENT_SHADER);
+  vertex_shader = create_shader("./mpm3d.vert", GL_VERTEX_SHADER);
+  fragment_shader = create_shader("./mpm3d.frag", GL_FRAGMENT_SHADER);
   gl_program = create_program({vertex_shader, fragment_shader});
 
   using uni = std::uniform_real_distribution<float>;
   // fill position buffer with initial values
   std::generate_n(std::back_inserter(pos_host_buffer), particle_count,
   [prng = std::default_random_engine(), x_dist = uni(0.f, x_abs_range),
-  y_dist = uni(0.f, y_abs_range)]() mutable {
-    return cl_float2{x_dist(prng) * 0.4f + 0.2f, y_dist(prng) * 0.4f + 0.2f};
+  y_dist = uni(0.f, y_abs_range), z_dist = uni(0.f, z_abs_range)]() mutable {
+    return cl_float3{x_dist(prng) * 0.4f + 0.2f, y_dist(prng) * 0.4f + 0.2f, z_dist(prng) * 0.4f + 0.2f};
   });
   // std::generate_n(std::back_inserter(pos_mass), particle_count,
   //                 [prng = std::default_random_engine(),
@@ -248,7 +255,7 @@ void MPM::initializeGL() {
     checkError("glGenBuffers(1, &vertex_buffer)");
     glBindBuffer(GL_ARRAY_BUFFER, *vbo_vao.first);
     checkError("glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer)");
-    glBufferData(GL_ARRAY_BUFFER, pos_host_buffer.size() * sizeof(cl_float2),
+    glBufferData(GL_ARRAY_BUFFER, pos_host_buffer.size() * sizeof(cl_float3),
                  pos_host_buffer.data(), GL_STATIC_DRAW);
     checkError(
         "glBufferData(GL_ARRAY_BUFFER, quad.size() * sizeof(float), "
@@ -266,7 +273,7 @@ void MPM::initializeGL() {
     // checkError(
     //     "glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, "
     //     "sizeof(cl_float4), (GLvoid *)(NULL))");
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(cl_float2),
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(cl_float3),
                           (GLvoid*)(NULL));
     checkError(
         "glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, "
@@ -336,22 +343,22 @@ void MPM::initializeCL() {
 
   // gws = cl::NDRange{particle_count};
   particle_ws = cl::NDRange{particle_count};
-  grid_ws = cl::NDRange{128, 128};
+  grid_ws = cl::NDRange{32, 32, 32};
   lws = cl::NullRange;
 
   // velocity_buffer = cl::Buffer{opencl_context, CL_MEM_READ_WRITE,
   //                              particle_count * sizeof(cl_float3), nullptr};
   // queue.enqueueFillBuffer(velocity_buffer, cl_float4{0, 0, 0, 0}, 0,
   //                         particle_count * sizeof(cl_float4));
-  particle_v = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float2), nullptr};
-  queue.enqueueFillBuffer(particle_v, cl_float2{0, -1.f}, 0, particle_count * sizeof(cl_float2));
-  Cmat = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float4), nullptr};
-  queue.enqueueFillBuffer(Cmat, cl_float4{0}, 0, particle_count * sizeof(cl_float4));
+  particle_v = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float3), nullptr};
+  queue.enqueueFillBuffer(particle_v, cl_float3{0, -1.f, 0}, 0, particle_count * sizeof(cl_float3));
+  Cmat = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(Mat3), nullptr};
+  queue.enqueueFillBuffer(Cmat, cl_float3{0}, 0, particle_count * sizeof(Mat3));
   J = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, particle_count * sizeof(cl_float), nullptr};
   queue.enqueueFillBuffer(J, cl_float{1}, 0, particle_count * sizeof(cl_float));
-  constexpr size_t GRID_N = 128 * 128;
-  grid_v = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, GRID_N * sizeof(cl_float2), nullptr};
-  queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
+  constexpr size_t GRID_N = 32 * 32 * 32;
+  grid_v = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, GRID_N * sizeof(cl_float3), nullptr};
+  queue.enqueueFillBuffer(grid_v, cl_float3{0}, 0, GRID_N * sizeof(cl_float3));
   grid_m = cl::Buffer{opencl_context, CL_MEM_READ_WRITE, GRID_N * sizeof(cl_float), nullptr};
   queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
   queue.finish();
@@ -395,8 +402,8 @@ void MPM::updateScene() {
   last_frame = start_time;
 
   while (time_elapsed > 0) {
-    constexpr size_t GRID_N = 128 * 128;
-    queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
+    constexpr size_t GRID_N = 32 * 32 * 32;
+    queue.enqueueFillBuffer(grid_v, cl_float3{0}, 0, GRID_N * sizeof(cl_float3));
     queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
     p2g(cl::EnqueueArgs{queue, particle_ws}, time_delta, cl_pos.front,
       particle_v, Cmat, J, grid_v, grid_m);
@@ -410,9 +417,9 @@ void MPM::updateScene() {
     time_elapsed -= 2 * time_delta;
   }
 
-  // for (int i = 0; i < 2; ++i) {
-  //   constexpr size_t GRID_N = 128 * 128;
-  //   queue.enqueueFillBuffer(grid_v, cl_float2{0}, 0, GRID_N * sizeof(cl_float2));
+  // for (int i = 0; i < 50; ++i) {
+  //   constexpr size_t GRID_N = 32 * 32 * 32;
+  //   queue.enqueueFillBuffer(grid_v, cl_float3{0}, 0, GRID_N * sizeof(cl_float3));
   //   queue.enqueueFillBuffer(grid_m, cl_float{0}, 0, GRID_N * sizeof(cl_float));
   //   p2g(cl::EnqueueArgs{queue, particle_ws}, time_delta, cl_pos.front,
   //     particle_v, Cmat, J, grid_v, grid_m);
