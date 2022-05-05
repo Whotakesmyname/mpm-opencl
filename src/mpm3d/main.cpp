@@ -337,9 +337,9 @@ void MPM::initializeCL() {
     return cl::Kernel{program, kernel_name};
   };
 
-  p2g_kernel = compile_kernel("./p2g.cl", "particle2grid");
-  grid_kernel = compile_kernel("./grid.cl", "grid_operation");
-  g2p_kernel = compile_kernel("./g2p.cl", "grid2particle");
+  p2g_kernel = compile_kernel("./p2g-3d.cl", "particle2grid");
+  grid_kernel = compile_kernel("./grid-3d.cl", "grid_operation");
+  g2p_kernel = compile_kernel("./g2p-3d.cl", "grid2particle");
 
   // gws = cl::NDRange{particle_count};
   particle_ws = cl::NDRange{particle_count};
