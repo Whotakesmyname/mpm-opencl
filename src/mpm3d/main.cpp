@@ -42,7 +42,7 @@ class MPM : public cl::sdk::InteropWindow {
   explicit MPM(unsigned int platform_id = 0,
                unsigned int device_id = 0,
                cl_bitfield device_type = CL_DEVICE_TYPE_DEFAULT)
-      : InteropWindow{sf::VideoMode(800, 800),
+      : InteropWindow{sf::VideoMode(1600, 1600),
                       "MPM in OpenCL",
                       sf::Style::Default,
                       sf::ContextSettings{32, 0, 0,  // Depth, Stencil, AA
@@ -491,13 +491,13 @@ void MPM::event(const sf::Event& event) {
       needMatrixReset = true;  // projection matrix need to be recalculated
       break;
     case sf::Event::MouseButtonPressed:
-      if (event.mouseButton.button == sf::Mouse::Button::Right) {
+      if (event.mouseButton.button == sf::Mouse::Button::Left) {
         RMB_pressed = true;
         mousePos = sf::Vector2i{event.mouseButton.x, event.mouseButton.y};
       }
       break;
     case sf::Event::MouseButtonReleased:
-      if (event.mouseButton.button == sf::Mouse::Button::Right)
+      if (event.mouseButton.button == sf::Mouse::Button::Left)
         RMB_pressed = false;
       break;
     case sf::Event::MouseMoved:
