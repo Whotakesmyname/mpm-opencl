@@ -62,7 +62,7 @@ class MPM : public cl::sdk::InteropWindow {
         last_frame(std::chrono::high_resolution_clock::now()),
         gravity(9.8f),
         RMB_pressed(false),
-        dist(1.5f * std::max({x_abs_range, y_abs_range, z_abs_range})),
+        dist(1.3f * std::max({x_abs_range, y_abs_range, z_abs_range})),
         phi(0),
         theta(0),
         needMatrixReset(true) {}
