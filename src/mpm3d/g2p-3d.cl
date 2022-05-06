@@ -53,7 +53,6 @@ kernel void grid2particle(
     size_t pid = get_global_linear_id();
     float3 grid_coord = position[pid] / GRID_SPAN;
     float3 fx, bx;
-    // fx = fract(grid_coord, &bx);
     bx = grid_coord - 0.5f;
     int3 coord = convert_int3(bx);
     fx = grid_coord - convert_float3(coord);
@@ -69,17 +68,13 @@ kernel void grid2particle(
                 float weight = weights[i].x * weights[j].y * weights[k].z;
                 int linear_coord = coord2index(coord + offset);
                 float3 grid_velocity = grid_v[linear_coord];
-                // printf("gcord: %v3d\n", coord + offset);
                 next_v += weight * grid_velocity;
-                // printf("v: %v3f\n", grid_velocity);
                 next_C = mat3_add(next_C, mat3_mul(4.f * weight * GRID_SPAN_INVSQ, make_outer_product(grid_velocity, pos_diff)));
             }
         }
     }
-    next_position[pid] = /* clamp( */position[pid] + next_v * time_delta/* , 0.1f, 0.9f) */;
-    // printf("pv: %v3f\n, pp: %v3f\n, v: %v3f\n, p: %v3f\n", velocity[pid], position[pid], next_v, next_position[pid]);
+    next_position[pid] = position[pid] + next_v * time_delta;
     velocity[pid] = next_v;
-    // position[pid] += next_v * time_delta;
     J[pid] *= 1.f + time_delta * mat3_trace(next_C);
     Cmat[pid] = next_C;
 }

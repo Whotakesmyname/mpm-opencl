@@ -92,17 +92,12 @@ kernel void particle2grid(
     size_t pid = get_global_linear_id();
     float3 grid_coord = position[pid] / GRID_SPAN;
     float3 fx, bx; // fraction and integer part of the position
-    // fx = fract(grid_coord, &bx);
     bx = grid_coord - 0.5f;
     int3 coord = convert_int3(bx);
     fx = grid_coord - convert_float3(coord);
-    // if (coord.x < 0 || coord.x >= 128 || coord.y < 0 || coord.y >=128)
-    //     printf("wrong coord: %d, %d, from %f, %f\n", coord.x, coord.y, grid_coord.x, grid_coord.y);
-    // printf("coord: %d, %d, from %f, %f\n", coord.x, coord.y, grid_coord.x, grid_coord.y);
     float3 weights[3] = {0.5f * pown(1.5f - fx, 2), 0.75f - pown(fx - 1.f, 2), 0.5f * pown(fx - 0.5f, 2)};
     float stress = -time_delta * 4 * E * P_VOL * (J[pid] - 1.f) * GRID_SPAN_INVSQ;
     Mat3 affine = mat3_add(make_id_mat(stress), mat3_mul(P_MASS, Cmat[pid]));
-    // printf("stress: %f, affine: %v4f\n", stress, affine);
     // scatter to grid
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
@@ -115,12 +110,6 @@ kernel void particle2grid(
                 float3 v_incr = P_MASS * velocity[pid] + APIC_term;
                 atomic_add_g_f3(&grid_v[linear_coord], weight * v_incr);
                 atomic_add_g_f(&grid_m[linear_coord], weight * P_MASS);
-                // printf("gcoord: %v3d, APIC: %v3f\n", coord + offset, APIC_term);
-                // printf("%v3f, %v3f\n", pos_diff, APIC_term);
-                // printf("%v3d: %v3f\n",coord + offset, grid_v[linear_coord]);
-                // printf("%v3f: %v3f\n", weight * v_incr, grid_v[linear_coord]);
-                // grid_v[linear_coord] += weight * (P_MASS * velocity[pid] + mat2x2_mul_float2(affine, pos_diff));
-                // grid_m[linear_coord] += weight * P_MASS;
             }
         }
     }
