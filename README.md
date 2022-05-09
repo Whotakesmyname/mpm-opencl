@@ -29,4 +29,4 @@ make mpm-opencl-3d
 ## Acknowledgement, License, and Copyright
 Licensed under Apache-2.0 License. This project uses OpenCL-SDK as a codebase, especially the OpenGL & OpenCL interoperation feature demonstrated in N-Body sample. OpenCL-SDK project is licensed under Apache-2.0.
 
-The MLS-MPM simulation codes follow the routine provided by some Python examples from [Taichi](https://github.com/taichi-dev/taichi) along with the instructions provided in the course GAMES 201 by Yuanming Hu. Taichi is also licensed under Apache-2.0.
+The MLS-MPM simulation codes follow the routine provided by relevant Python examples from [Taichi](https://github.com/taichi-dev/taichi) along with the instructions provided in the course GAMES 201 by Yuanming Hu. Taichi is also licensed under Apache-2.0.
